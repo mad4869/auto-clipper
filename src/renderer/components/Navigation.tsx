@@ -1,4 +1,5 @@
 import { useStore, type AppStage } from '../store'
+import SettingsPanel from './SettingsPanel'
 
 const STAGES: { key: AppStage; label: string }[] = [
   { key: 'import', label: 'Import' },
