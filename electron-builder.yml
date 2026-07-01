@@ -25,3 +25,7 @@ extraResources:
     to: ffmpeg
     filter:
       - "**/*"
+  - from: resources/whisper
+    to: whisper
+    filter:
+      - "**/*"

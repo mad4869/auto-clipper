@@ -1,41 +1,26 @@
 import { execFile, type ExecFileOptions } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { app } from 'electron'
 import { AppError, ErrorCodes } from '../utils/errors'
+import { resolveResourcesDir } from '../utils/paths'
 
 let cachedPath: string | null = null
 
 export function resolveFfmpegPath (): string {
   if (cachedPath) return cachedPath
 
-  const candidates: string[] = []
+  const ext = process.platform === 'win32' ? '.exe' : ''
 
-  if (app.isPackaged) {
-    const resourcePath = process.resourcesPath
-    const platform = process.platform
-    const ext = platform === 'win32' ? '.exe' : ''
-    candidates.push(join(resourcePath, 'ffmpeg', `ffmpeg${ext}`))
+  // Check bundled/local resources first (works in both dev and packaged modes)
+  const bundled = join(resolveResourcesDir(), 'ffmpeg', `ffmpeg${ext}`)
+  if (existsSync(bundled)) {
+    cachedPath = bundled
+    return bundled
   }
 
-  candidates.push('ffmpeg')
-
-  for (const candidate of candidates) {
-    if (candidate === 'ffmpeg') {
-      cachedPath = 'ffmpeg'
-      return 'ffmpeg'
-    }
-    if (existsSync(candidate)) {
-      cachedPath = candidate
-      return candidate
-    }
-  }
-
-  throw new AppError(
-    'FFmpeg not found. Install FFmpeg or place it in resources/ffmpeg/.',
-    ErrorCodes.FFMPEG_NOT_FOUND,
-    true
-  )
+  // Fall back to system PATH
+  cachedPath = 'ffmpeg'
+  return 'ffmpeg'
 }
 
 export interface FfmpegProgress {

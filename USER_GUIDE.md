@@ -85,7 +85,11 @@ Click the gear icon in the top navigation bar.
 ### Whisper Model
 - Choose model size: tiny / base / **small** (default) / medium / large
 - Grayed-out options mean that model isn't downloaded yet
-- Model location: `~/Library/Application Support/video-clipper/whisper-models/` (macOS)
+- Model locations (pick one):
+  - **Local** (dev & packaged): `resources/whisper/models/ggml-<size>.bin`
+  - **macOS**: `~/Library/Application Support/video-clipper/whisper-models/`
+  - **Windows**: `%APPDATA%\video-clipper\whisper-models\`
+  - **Linux**: `~/.config/video-clipper/whisper-models/`
 
 ### Ollama / Local LLM
 - Shows connection status and available models
@@ -119,8 +123,8 @@ ollama pull llama3.2
 
 | Problem | Solution |
 |---------|----------|
-| "FFmpeg not found" | Install FFmpeg globally or place binary in `resources/ffmpeg/` |
-| "Whisper model not found" | Download a GGML model from huggingface.co/ggerganov/whisper.cpp |
+| "FFmpeg not found" | Place `ffmpeg[.exe]` in `resources/ffmpeg/`, or install FFmpeg globally |
+| "Whisper model not found" | Download a GGML model from [huggingface.co/ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp/tree/main) and place in `resources/whisper/models/` or your platform's app data directory |
 | "Ollama not running" | Start Ollama desktop app or run `ollama serve` |
 | Transcription fails | Try a smaller model; check the audio is clear |
 | Export takes too long | Use a smaller Whisper model; reduce number of clips |

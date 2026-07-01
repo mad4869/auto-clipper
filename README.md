@@ -23,37 +23,55 @@ A cross-platform desktop app for splitting long-form videos into short clips wit
 
 ## Prerequisites
 
-### Required
+> [!NOTE]
+> **Development vs. packaged:** In dev mode (`npm run dev`), the app looks for binaries in the local `resources/` directory **or** on the system PATH. A packaged build bundles everything from `resources/` automatically. See [`resources/README.md`](resources/README.md) for the full directory layout.
 
-1. **FFmpeg** — Download from [ffmpeg.org](https://ffmpeg.org) and place the binary at:
-   - `resources/ffmpeg/ffmpeg` (macOS/Linux)
-   - `resources/ffmpeg/ffmpeg.exe` (Windows)
-   - Or install globally via `brew install ffmpeg` (macOS) / `apt install ffmpeg` (Linux) / [Windows installer](https://ffmpeg.org/download.html)
+### Required for development
 
-2. **whisper.cpp model** — Download a GGML model from [huggingface.co/ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp/tree/main):
+1. **FFmpeg** — place the binary at `resources/ffmpeg/ffmpeg[.exe]`, or install globally:
    ```bash
-   # Recommended: small model (~466MB)
-   curl -L -o ~/Library/Application\ Support/video-clipper/whisper-models/ggml-small.bin \
-     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+   # macOS
+   brew install ffmpeg
+   # Ubuntu/Debian
+   apt install ffmpeg
+   # Windows — download from https://ffmpeg.org/download.html and add to PATH
    ```
-   Or use tiny/base for faster but less accurate results.
 
-3. **whisper.cpp CLI** — Build from [github.com/ggerganov/whisper.cpp](https://github.com/ggerganov/whisper.cpp):
+2. **whisper.cpp CLI** — build from source and copy to `resources/whisper/`:
    ```bash
    git clone https://github.com/ggerganov/whisper.cpp
    cd whisper.cpp
    make -j4
-   # Copy the `main` binary to:
-   cp main ../video-clipper/resources/whisper/whisper-cli
+
+   # macOS / Linux
+   cp whisper-cli /path/to/auto-clipper/resources/whisper/whisper-cli
+
+   # Windows (MinGW / CMake build)
+   copy build\bin\whisper-cli.exe \path\to\auto-clipper\resources\whisper\whisper-cli.exe
    ```
+   Or install a pre-built binary and ensure `whisper-cli` is on your PATH.
+
+3. **Whisper GGML model** — download from [huggingface.co/ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp/tree/main) and place in `resources/whisper/models/`:
+   ```bash
+   # Recommended: small model (~466 MB)
+   curl -L -o resources/whisper/models/ggml-small.bin \
+     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+   ```
+   Alternatively, place the model in the platform-specific app data directory:
+
+   | Platform | Path |
+   |----------|------|
+   | macOS    | `~/Library/Application Support/video-clipper/whisper-models/` |
+   | Windows  | `%APPDATA%\video-clipper\whisper-models\` |
+   | Linux    | `~/.config/video-clipper/whisper-models/` |
 
 ### Optional
 
-4. **Ollama** — Download from [ollama.ai](https://ollama.ai) and pull a model:
+4. **Ollama** — download from [ollama.ai](https://ollama.ai) and pull a model:
    ```bash
    ollama pull llama3.2
    ```
-   The app auto-detects Ollama. If not found, LLM features are gracefully disabled.
+   The app auto-detects Ollama at startup. If not found, LLM features are gracefully disabled.
 
 ## Setup & Development
 
@@ -87,22 +105,29 @@ npm run build:unpack
 ## Project Structure
 
 ```
-video-clipper/
+auto-clipper/
+├── resources/             # Place external binaries here (gitignored except scaffold)
+│   ├── ffmpeg/
+│   │   └── ffmpeg[.exe]   # FFmpeg binary (or use system PATH)
+│   ├── whisper/
+│   │   ├── whisper-cli[.exe]  # whisper.cpp binary (or use system PATH)
+│   │   └── models/
+│   │       └── ggml-small.bin # GGML model file
+│   └── README.md          # Full setup instructions
 ├── src/
 │   ├── main/              # Electron main process
 │   │   ├── index.ts       # Entry point
 │   │   ├── ipc-handlers.ts
-│   │   ├── ffmpeg/        # FFmpeg binary, splitting, caption burning
-│   │   ├── whisper/       # Whisper binary, transcription
+│   │   ├── ffmpeg/        # FFmpeg binary resolution, splitting, caption burning
+│   │   ├── whisper/       # Whisper binary/model resolution, transcription
 │   │   ├── llm/           # Ollama client, LLM prompts
-│   │   └── utils/         # Progress, error handling
+│   │   └── utils/         # Progress, error handling, path resolution
 │   ├── preload/           # Context bridge (IPC exposure)
 │   └── renderer/          # React UI
 │       ├── components/    # ImportView, SplitSettings, ClipPreview, etc.
 │       ├── store/         # Zustand state management
 │       └── styles/        # Global CSS
 ├── tests/                 # Vitest tests
-├── resources/             # Icons, bundled binaries
 └── electron-builder.yml   # Build configuration
 ```
 

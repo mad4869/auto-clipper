@@ -4,3 +4,12 @@ dist/
 release/
 *.log
 .DS_Store
+
+# Ignore binary contents of resources/ but keep the directory scaffold
+resources/ffmpeg/*
+!resources/ffmpeg/.gitkeep
+resources/whisper/*
+!resources/whisper/.gitkeep
+!resources/whisper/models/
+resources/whisper/models/*
+!resources/whisper/models/.gitkeep

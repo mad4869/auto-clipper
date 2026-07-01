@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 import { AppError, ErrorCodes } from '../utils/errors'
+import { resolveResourcesDir } from '../utils/paths'
 
 export type WhisperModelSize = 'tiny' | 'base' | 'small' | 'medium' | 'large'
 
@@ -19,67 +20,54 @@ let cachedModelsDir: string | null = null
 export function resolveWhisperPath (): string {
   if (cachedWhisperPath) return cachedWhisperPath
 
-  const candidates: string[] = []
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  const resourcesDir = resolveResourcesDir()
 
-  if (app.isPackaged) {
-    const resourcePath = process.resourcesPath
-    const platform = process.platform
-    const ext = platform === 'win32' ? '.exe' : ''
-    candidates.push(join(resourcePath, 'whisper', `whisper-cli${ext}`))
-    candidates.push(join(resourcePath, 'whisper', `whisper.cpp${ext}`))
-    candidates.push(join(resourcePath, 'whisper', `main${ext}`))
-  }
+  // Check bundled/local resources first (works in both dev and packaged modes)
+  // The canonical name is whisper-cli; `main` is the legacy build output name
+  const bundledCandidates = [
+    join(resourcesDir, 'whisper', `whisper-cli${ext}`),
+    join(resourcesDir, 'whisper', `main${ext}`)
+  ]
 
-  candidates.push('whisper-cli')
-  candidates.push('whisper.cpp')
-  candidates.push('whisper-cpp')
-
-  for (const candidate of candidates) {
-    if (candidate === 'whisper-cli' || candidate === 'whisper.cpp' || candidate === 'whisper-cpp') {
-      cachedWhisperPath = candidate
-      return candidate
-    }
+  for (const candidate of bundledCandidates) {
     if (existsSync(candidate)) {
       cachedWhisperPath = candidate
       return candidate
     }
   }
 
-  throw new AppError(
-    'Whisper CLI not found. Build whisper.cpp and place the binary in resources/whisper/.',
-    ErrorCodes.WHISPER_NOT_FOUND,
-    true
-  )
+  // Fall back to system PATH
+  cachedWhisperPath = 'whisper-cli'
+  return 'whisper-cli'
 }
 
 export function resolveModelsDir (): string {
   if (cachedModelsDir) return cachedModelsDir
 
-  const candidates: string[] = []
-
-  if (app.isPackaged) {
-    const resourcePath = process.resourcesPath
-    candidates.push(join(resourcePath, 'whisper', 'models'))
+  // Check bundled/local resources first (works in both dev and packaged modes)
+  const bundledModels = join(resolveResourcesDir(), 'whisper', 'models')
+  if (existsSync(bundledModels)) {
+    cachedModelsDir = bundledModels
+    return bundledModels
   }
 
+  // Check user data directory (cross-platform app data)
+  //   macOS:   ~/Library/Application Support/video-clipper/whisper-models/
+  //   Windows: %APPDATA%\video-clipper\whisper-models\
+  //   Linux:   ~/.config/video-clipper/whisper-models/
   const userDataPath = app.getPath('userData')
-  candidates.push(join(userDataPath, 'whisper-models'))
-
-  candidates.push('models')
-  candidates.push('./models')
-
-  for (const dir of candidates) {
-    if (existsSync(dir)) {
-      cachedModelsDir = dir
-      return dir
-    }
+  const userModels = join(userDataPath, 'whisper-models')
+  if (existsSync(userModels)) {
+    cachedModelsDir = userModels
+    return userModels
   }
 
-  const defaultDir = join(userDataPath, 'whisper-models')
+  // Default: create the user data directory on first use
   const { mkdirSync } = require('node:fs')
-  mkdirSync(defaultDir, { recursive: true })
-  cachedModelsDir = defaultDir
-  return defaultDir
+  mkdirSync(userModels, { recursive: true })
+  cachedModelsDir = userModels
+  return userModels
 }
 
 export function findModelPath (modelSize: WhisperModelSize): string {
