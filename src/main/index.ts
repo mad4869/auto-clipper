@@ -17,7 +17,7 @@ function createWindow (): void {
       nodeIntegration: false
     },
     show: false,
-    titleBarStyle: 'hiddenInset'
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' } : {})
   })
 
   mainWindow.on('ready-to-show', () => {
