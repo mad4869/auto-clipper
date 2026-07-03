@@ -13,56 +13,10 @@ export default function ClipPreview () {
   const outputDir = useStore((s) => s.outputDir)
   const setSplitPoints = useStore((s) => s.setSplitPoints)
   const setStage = useStore((s) => s.setStage)
-  const setError = useStore((s) => s.setError)
-  const ollama = useStore((s) => s.ollama)
-  const selectedOllamaModel = useStore((s) => s.selectedOllamaModel)
-  const transcription = useStore((s) => s.transcription)
-  const setTranscription = useStore((s) => s.setTranscription)
-  const whisperModelSize = useStore((s) => s.whisperModelSize)
-  const setProcessing = useStore((s) => s.setProcessing)
-  const setProgress = useStore((s) => s.setProgress)
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editStart, setEditStart] = useState(0)
   const [editEnd, setEditEnd] = useState(0)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [transcribing, setTranscribing] = useState(false)
-  const [llmSuggestions, setLlmSuggestions] = useState<Array<{ startTime: number; endTime: number; reason: string }>>([])
-
-  const handleTranscribe = useCallback(async () => {
-    if (!video || !outputDir) return
-
-    setTranscribing(true)
-    setProcessing(true)
-    try {
-      const api = (window as any).electronAPI
-      const tempAudioPath = `${outputDir}/.temp_audio_${Date.now()}.wav`
-      setProgress({ stage: 'Extracting audio...', percent: 10, detail: '' })
-
-      await api.extractAudio({ videoPath: video.path, outputPath: tempAudioPath })
-
-      setProgress({ stage: 'Transcribing...', percent: 30, detail: '' })
-
-      const result = await api.transcribe({
-        audioPath: tempAudioPath,
-        modelSize: whisperModelSize
-      })
-
-      setTranscription({
-        text: result.text,
-        words: result.words,
-        language: result.language
-      })
-
-      setProgress({ stage: 'Done', percent: 100, detail: 'Transcription complete' })
-    } catch (err: any) {
-      setError(err.message || 'Transcription failed')
-    } finally {
-      setTranscribing(false)
-      setProcessing(false)
-      setProgress(null)
-    }
-  }, [video, outputDir, whisperModelSize, setTranscription, setProcessing, setProgress, setError])
 
   const handleDelete = useCallback((index: number) => {
     const newPoints = splitPoints
@@ -89,50 +43,6 @@ export default function ClipPreview () {
     setSplitPoints(newPoints)
     setEditingIndex(null)
   }, [editingIndex, editStart, editEnd, splitPoints, setSplitPoints])
-
-  const handleLlmAnalysis = useCallback(async () => {
-    if (!transcription || !video) return
-    setAnalyzing(true)
-    try {
-      const api = (window as any).electronAPI
-      const highlights = await api.llmDetectHighlights({
-        transcript: transcription.text,
-        duration: video.duration,
-        numberOfHighlights: Math.min(splitPoints.length, 5),
-        model: selectedOllamaModel
-      })
-      if (highlights && highlights.length > 0) {
-        setLlmSuggestions(highlights)
-        const newPoints = highlights.map((h: any, i: number) => ({
-          index: i,
-          start: h.startTime,
-          end: h.endTime
-        }))
-        setSplitPoints(newPoints)
-      }
-    } catch (err: any) {
-      setError(err.message || 'LLM analysis failed')
-    } finally {
-      setAnalyzing(false)
-    }
-  }, [transcription, video, splitPoints.length, selectedOllamaModel, setSplitPoints, setError])
-
-  const handleAcceptSuggestion = useCallback((suggestion: { startTime: number; endTime: number }, index: number) => {
-    const overlaps = splitPoints.some((p, i) =>
-      i !== index &&
-      p.start < suggestion.endTime &&
-      p.end > suggestion.startTime
-    )
-    if (!overlaps) {
-      const newPoints = [...splitPoints]
-      newPoints[index] = {
-        start: suggestion.startTime,
-        end: suggestion.endTime,
-        index
-      }
-      setSplitPoints(newPoints)
-    }
-  }, [splitPoints, setSplitPoints])
 
   return (
     <div className="view preview-view">
@@ -202,49 +112,6 @@ export default function ClipPreview () {
             </div>
           ))}
         </div>
-
-        {ollama?.running && (
-          <div className="llm-section">
-            {transcription ? (
-              <button
-                className="btn btn-secondary"
-                onClick={handleLlmAnalysis}
-                disabled={analyzing}
-              >
-                {analyzing ? 'Analyzing with LLM...' : 'AI Highlight Detection'}
-              </button>
-            ) : (
-              <button
-                className="btn btn-secondary"
-                onClick={handleTranscribe}
-                disabled={transcribing}
-              >
-                {transcribing ? 'Transcribing...' : 'Transcribe to enable AI Highlights'}
-              </button>
-            )}
-            <p className="hint">
-              Uses local LLM to suggest engaging segments. Requires transcribed video.
-            </p>
-
-            {llmSuggestions.length > 0 && (
-              <div className="suggestions">
-                <h3>LLM Suggestions</h3>
-                {llmSuggestions.map((s, i) => (
-                  <div key={i} className="suggestion-item">
-                    <span>{formatTime(s.startTime)} - {formatTime(s.endTime)}</span>
-                    <span className="suggestion-reason">{s.reason}</span>
-                    <button
-                      className="btn btn-small btn-primary"
-                      onClick={() => handleAcceptSuggestion(s, i)}
-                    >
-                      Apply
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="button-row">
           <button className="btn" onClick={() => setStage('split-settings')}>Back</button>

@@ -37,19 +37,25 @@ export function buildCleanTranscriptPrompt (options: CleanTranscriptOptions): st
 }
 
 export function buildHighlightDetectionPrompt (options: HighlightSuggestionOptions): string {
-  return `You are analyzing a video transcript to find the most engaging segments for short-form content (TikTok/Reels/Shorts).
+  const n = options.numberOfHighlights || 5
+  const minDur = options.minHighlightDuration || 15
+  const maxDur = options.maxHighlightDuration || 60
+  return `You are a video editor AI. Analyze the transcript below and find the ${n} most engaging segments suitable for short-form social media clips (TikTok, Reels, YouTube Shorts).
+
+Video duration: ${Math.round(options.duration)} seconds
 
 Transcript:
 ${options.transcript}
 
-Video duration: ${Math.round(options.duration)} seconds
+Rules:
+- Select exactly ${n} segments
+- Each segment must be ${minDur} to ${maxDur} seconds long (endTime - startTime)
+- startTime and endTime must be valid seconds within 0 to ${Math.round(options.duration)}
+- Focus on: strong hooks, emotional peaks, key insights, surprising facts, or memorable quotes
+- Reply with ONLY a valid JSON array, nothing else. No markdown, no explanations.
 
-Requirements:
-- Find ${options.numberOfHighlightSites || 5} highlight segments
-- Each segment should be ${options.minHighlightDuration || 15}-${options.maxHighlightDuration || 60} seconds long
-- Look for: emotional moments, key insights, surprising statements, call-to-actions, hooks
-- Return as JSON array with objects: { "startTime": <seconds>, "endTime": <seconds>, "reason": "<why this is engaging>" }
-- ONLY return the JSON array, no other text`
+JSON format:
+[{"startTime": 10, "endTime": 45, "reason": "Strong hook that grabs attention"}, ...]`
 }
 
 export function buildTitleGenerationPrompt (options: TitleGenerationOptions): string {
@@ -66,13 +72,28 @@ ONLY return the JSON array, no other text.`
 }
 
 export function parseJsonResponse<T> (response: string): T | null {
+  // Strip markdown code fences if present
+  let text = response
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim()
+
+  // Try direct parse first
   try {
-    const cleaned = response
-      .replace(/```json\s*/g, '')
-      .replace(/```\s*/g, '')
-      .trim()
-    return JSON.parse(cleaned) as T
-  } catch {
-    return null
+    return JSON.parse(text) as T
+  } catch {}
+
+  // Try to extract the first JSON array [...] from the text
+  const arrayMatch = text.match(/\[\s*\{[\s\S]*?\}\s*\]/)
+  if (arrayMatch) {
+    try { return JSON.parse(arrayMatch[0]) as T } catch {}
   }
+
+  // Try to extract the first JSON object {...}
+  const objectMatch = text.match(/\{[\s\S]*?\}/)
+  if (objectMatch) {
+    try { return JSON.parse(objectMatch[0]) as T } catch {}
+  }
+
+  return null
 }
