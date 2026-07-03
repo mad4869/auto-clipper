@@ -64,6 +64,7 @@ export interface AppState {
   whisperModelSize: string
   availableModels: Array<{ size: string; path: string }>
   ollama: OllamaStatus | null
+  selectedOllamaModel: string
   processing: boolean
   progress: { stage: string; percent: number; detail: string } | null
   clipPaths: string[]
@@ -79,6 +80,7 @@ export interface AppState {
   setWhisperModelSize: (size: string) => void
   setAvailableModels: (models: Array<{ size: string; path: string }>) => void
   setOllama: (status: OllamaStatus | null) => void
+  setSelectedOllamaModel: (model: string) => void
   setProcessing: (p: boolean) => void
   setProgress: (p: { stage: string; percent: number; detail: string } | null) => void
   setClipPaths: (paths: string[]) => void
@@ -119,6 +121,7 @@ export const useStore = create<AppState>((set) => ({
   whisperModelSize: 'small',
   availableModels: [],
   ollama: null,
+  selectedOllamaModel: '',
   processing: false,
   progress: null,
   clipPaths: [],
@@ -133,7 +136,16 @@ export const useStore = create<AppState>((set) => ({
   setTranscription: (t) => set({ transcription: t }),
   setWhisperModelSize: (size) => set({ whisperModelSize: size }),
   setAvailableModels: (models) => set({ availableModels: models }),
-  setOllama: (status) => set({ ollama: status }),
+  setOllama: (status) => set((state) => {
+    let newSelected = state.selectedOllamaModel
+    if (status?.models && status.models.length > 0) {
+      if (!newSelected || !status.models.some(m => m.name === newSelected)) {
+        newSelected = status.models[0].name
+      }
+    }
+    return { ollama: status, selectedOllamaModel: newSelected }
+  }),
+  setSelectedOllamaModel: (model) => set({ selectedOllamaModel: model }),
   setProcessing: (p) => set({ processing: p }),
   setProgress: (p) => set({ progress: p }),
   setClipPaths: (paths) => set({ clipPaths: paths }),

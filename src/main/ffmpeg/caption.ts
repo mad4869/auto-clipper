@@ -27,6 +27,23 @@ export async function burnCaptions (
   onProgress?: (percent: number) => void,
   signal?: AbortSignal
 ): Promise<string> {
+  let words = job.words
+  if (job.splitPoint) {
+    const spStart = job.splitPoint.start
+    const spEnd = job.splitPoint.end
+    words = words
+      .filter(w => w.end > spStart && w.start < spEnd)
+      .map(w => ({
+        ...w,
+        start: Math.max(0, w.start - spStart),
+        end: Math.max(0, w.end - spStart)
+      }))
+  }
+
+  if (words.length === 0) {
+    throw new AppError('Cannot burn captions: transcript has 0 words for this clip. Please make sure transcription succeeded.', 'NO_WORDS', true)
+  }
+
   const style = { ...DEFAULT_CAPTION_STYLE, ...job.style }
   const ext = extname(job.inputPath) || '.mp4'
   const baseName = basename(job.inputPath, ext)
@@ -39,24 +56,24 @@ export async function burnCaptions (
 
   if (job.exportSrt !== false) {
     const srtPath = join(job.outputDir, `${baseName}.srt`)
-    writeFileSync(srtPath, buildSrtFile(job.words))
+    writeFileSync(srtPath, buildSrtFile(words))
   }
 
   if (job.exportAss !== false) {
     const assPath = join(job.outputDir, `${baseName}.ass`)
-    const assContent = buildAssSubtitleFile(job.words, style)
+    const assContent = buildAssSubtitleFile(words, style)
     writeFileSync(assPath, assContent)
   }
 
   const assPath = join(job.outputDir, `${baseName}_temp.ass`)
-  const assContent = buildAssSubtitleFile(job.words, style)
+  const assContent = buildAssSubtitleFile(words, style)
   writeFileSync(assPath, assContent)
 
   try {
     const wordsPerLine = style.maxWordsPerLine
     const chunks: WordTiming[][] = []
-    for (let i = 0; i < job.words.length; i += wordsPerLine) {
-      chunks.push(job.words.slice(i, i + wordsPerLine))
+    for (let i = 0; i < words.length; i += wordsPerLine) {
+      chunks.push(words.slice(i, i + wordsPerLine))
     }
 
     const filterParts: string[] = []

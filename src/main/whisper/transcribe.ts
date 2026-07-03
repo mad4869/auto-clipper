@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { readFile, unlink } from 'node:fs/promises'
 import { resolveWhisperPath, findModelPath, type WhisperModelSize, WHISPER_MODEL_SIZES } from './whisper'
 import { type WordTiming } from '../ffmpeg/filters'
 import { AppError, ErrorCodes } from '../utils/errors'
@@ -60,12 +61,10 @@ export async function transcribeAudio (
   const args: string[] = [
     '-m', modelPath,
     '-f', audioPath,
-    '-ot', // output timings (word-level timestamps)
     '-t', '4', // use 4 threads
     '-l', options.language || 'auto',
-    '--no-timestamps',
     '-oj', // output as JSON
-    '--max-len', '1' // one word per line for word timestamps
+    '-ojf' // output full JSON including tokens
   ]
 
   return new Promise((resolve, reject) => {
@@ -73,28 +72,42 @@ export async function transcribeAudio (
       whisperPath,
       args,
       { maxBuffer: 1024 * 1024 * 50 },
-      (error, stdout, stderr) => {
-        if (error && !stdout) {
-          reject(new AppError(
-            `Transcription failed: ${stderr || error.message}`,
-            ErrorCodes.TRANSCRIPTION_FAILED,
-            true
-          ))
-          return
-        }
+      async (error, stdout, stderr) => {
+        const jsonPath = `${audioPath}.json`
 
         try {
-          const jsonOutput = stdout.trim()
-          const parsed = JSON.parse(jsonOutput)
+          const jsonContent = await readFile(jsonPath, 'utf8')
+          const parsed = JSON.parse(jsonContent)
 
           const words: WordTiming[] = []
-          let text = ''
+          const textSegments: string[] = []
 
-          if (parsed.transcription) {
-            text = parsed.transcription.text || ''
-            if (parsed.transcription.segments) {
+          if (Array.isArray(parsed.transcription)) {
+            for (const seg of parsed.transcription) {
+              if (seg.text) textSegments.push(seg.text.trim())
+              if (Array.isArray(seg.tokens) && seg.tokens.length > 0) {
+                for (const tok of seg.tokens) {
+                  const tokText = (tok.text || '').trim()
+                  if (!tokText || tokText.startsWith('[') && tokText.endsWith(']')) continue
+                  words.push({
+                    word: tokText,
+                    start: (tok.offsets?.from || 0) / 1000,
+                    end: (tok.offsets?.to || 0) / 1000
+                  })
+                }
+              } else if (seg.text) {
+                words.push({
+                  word: seg.text.trim(),
+                  start: (seg.offsets?.from || 0) / 1000,
+                  end: (seg.offsets?.to || 0) / 1000
+                })
+              }
+            }
+          } else if (parsed.transcription) {
+            if (parsed.transcription.text) textSegments.push(parsed.transcription.text)
+            if (Array.isArray(parsed.transcription.segments)) {
               for (const seg of parsed.transcription.segments) {
-                if (seg.words) {
+                if (Array.isArray(seg.words)) {
                   for (const w of seg.words) {
                     words.push({
                       word: w.text || w.word || '',
@@ -107,35 +120,40 @@ export async function transcribeAudio (
             }
           }
 
-          if (words.length === 0) {
-            const parsed2 = parseWhisperOutput(stdout || stderr)
+          const fullText = textSegments.join(' ')
+          await unlink(jsonPath).catch(() => {})
+
+          if (words.length > 0) {
             resolve({
-              text: parsed2.text,
-              words: parsed2.words,
-              language: options.language || 'en',
-              duration: parsed2.words.length > 0
-                ? parsed2.words[parsed2.words.length - 1].end
-                : 0
-            })
-          } else {
-            resolve({
-              text,
+              text: fullText,
               words,
-              language: parsed.transcription?.language || options.language || 'en',
-              duration: words.length > 0 ? words[words.length - 1].end : 0
+              language: parsed.result?.language || options.language || 'en',
+              duration: words[words.length - 1].end
             })
+            return
           }
         } catch {
-          const parsed = parseWhisperOutput(stdout || stderr)
-          resolve({
-            text: parsed.text,
-            words: parsed.words,
-            language: options.language || 'en',
-            duration: parsed.words.length > 0
-              ? parsed.words[parsed.words.length - 1].end
-              : 0
-          })
+          await unlink(jsonPath).catch(() => {})
         }
+
+        if (error && !stdout) {
+          reject(new AppError(
+            `Transcription failed: ${stderr || error?.message}`,
+            ErrorCodes.TRANSCRIPTION_FAILED,
+            true
+          ))
+          return
+        }
+
+        const parsedOutput = parseWhisperOutput(stdout || stderr || '')
+        resolve({
+          text: parsedOutput.text,
+          words: parsedOutput.words,
+          language: options.language || 'en',
+          duration: parsedOutput.words.length > 0
+            ? parsedOutput.words[parsedOutput.words.length - 1].end
+            : 0
+        })
       }
     )
 

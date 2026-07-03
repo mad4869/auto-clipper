@@ -247,16 +247,30 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
     return generateText({ model, prompt, system, temperature, maxTokens })
   })
 
+async function resolveOllamaModel (requested?: string): Promise<string> {
+  const models = await listOllamaModels()
+  if (requested && models.includes(requested)) {
+    return requested
+  }
+  if (models.length > 0) {
+    return models[0]
+  }
+  return requested || 'llama3.2'
+}
+
   ipcMain.handle('llm-clean-transcript', async (_event, {
     transcript,
-    options
+    options,
+    model
   }: {
     transcript: string
     options: CleanTranscriptOptions
+    model?: string
   }) => {
+    const activeModel = await resolveOllamaModel(model)
     const prompt = buildCleanTranscriptPrompt({ transcript, ...options })
     return generateText({
-      model: 'llama3.2',
+      model: activeModel,
       prompt,
       system: 'You are a transcript cleaning assistant. Return only the cleaned text.',
       temperature: 0.3
@@ -266,12 +280,15 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
   ipcMain.handle('llm-detect-highlights', async (_event, {
     transcript,
     duration,
-    numberOfHighlights
+    numberOfHighlights,
+    model
   }: {
     transcript: string
     duration: number
     numberOfHighlights?: number
+    model?: string
   }) => {
+    const activeModel = await resolveOllamaModel(model)
     const prompt = buildHighlightDetectionPrompt({
       transcript,
       duration,
@@ -279,7 +296,7 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
     })
 
     const response = await generateText({
-      model: 'llama3.2',
+      model: activeModel,
       prompt,
       system: 'You are a video highlight detection assistant. Return only JSON.',
       temperature: 0.5
@@ -290,15 +307,18 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
 
   ipcMain.handle('llm-generate-titles', async (_event, {
     transcript,
-    context
+    context,
+    model
   }: {
     transcript: string
     context?: string
+    model?: string
   }) => {
+    const activeModel = await resolveOllamaModel(model)
     const prompt = buildTitleGenerationPrompt({ transcript, context })
 
     const response = await generateText({
-      model: 'llama3.2',
+      model: activeModel,
       prompt,
       system: 'You are a social media title generation assistant. Return only JSON.',
       temperature: 0.7

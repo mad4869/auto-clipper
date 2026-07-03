@@ -4,6 +4,8 @@ import { useStore } from '../store'
 export default function SettingsPanel () {
   const [open, setOpen] = useState(false)
   const ollama = useStore((s) => s.ollama)
+  const selectedOllamaModel = useStore((s) => s.selectedOllamaModel)
+  const setSelectedOllamaModel = useStore((s) => s.setSelectedOllamaModel)
   const availableModels = useStore((s) => s.availableModels)
   const whisperModelSize = useStore((s) => s.whisperModelSize)
   const setWhisperModelSize = useStore((s) => s.setWhisperModelSize)
@@ -52,8 +54,17 @@ export default function SettingsPanel () {
                 {ollama?.running ? 'Connected' : 'Not available'}
               </div>
               {ollama?.running && ollama.models.length > 0 && (
-                <div className="ollama-models">
-                  Available models: {ollama.models.map((m) => m.name).join(', ')}
+                <div className="ollama-models" style={{ marginTop: '0.5rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.25rem' }}>Active LLM Model:</label>
+                  <select
+                    value={selectedOllamaModel || ollama.models[0].name}
+                    onChange={(e) => setSelectedOllamaModel(e.target.value)}
+                    style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', background: '#2a2a2a', color: '#fff', border: '1px solid #444' }}
+                  >
+                    {ollama.models.map((m) => (
+                      <option key={m.name} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
                 </div>
               )}
               {!ollama?.running && (

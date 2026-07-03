@@ -28,11 +28,11 @@ const api = {
   checkOllama: () => ipcRenderer.invoke('check-ollama'),
   ollamaGenerate: (params: { model: string; prompt: string; system?: string; temperature?: number; maxTokens?: number }) =>
     ipcRenderer.invoke('ollama-generate', params),
-  llmCleanTranscript: (params: { transcript: string; options: Record<string, unknown> }) =>
+  llmCleanTranscript: (params: { transcript: string; options: Record<string, unknown>; model?: string }) =>
     ipcRenderer.invoke('llm-clean-transcript', params),
-  llmDetectHighlights: (params: { transcript: string; duration: number; numberOfHighlights?: number }) =>
+  llmDetectHighlights: (params: { transcript: string; duration: number; numberOfHighlights?: number; model?: string }) =>
     ipcRenderer.invoke('llm-detect-highlights', params),
-  llmGenerateTitles: (params: { transcript: string; context?: string }) =>
+  llmGenerateTitles: (params: { transcript: string; context?: string; model?: string }) =>
     ipcRenderer.invoke('llm-generate-titles', params),
   cancelOperation: (channelId: string) => ipcRenderer.send('cancel-operation', channelId),
   onProgress: (callback: (event: unknown) => void) => {

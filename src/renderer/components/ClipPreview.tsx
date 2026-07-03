@@ -15,6 +15,7 @@ export default function ClipPreview () {
   const setStage = useStore((s) => s.setStage)
   const setError = useStore((s) => s.setError)
   const ollama = useStore((s) => s.ollama)
+  const selectedOllamaModel = useStore((s) => s.selectedOllamaModel)
   const transcription = useStore((s) => s.transcription)
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -57,7 +58,8 @@ export default function ClipPreview () {
       const highlights = await api.llmDetectHighlights({
         transcript: transcription.text,
         duration: video.duration,
-        numberOfHighlights: Math.min(splitPoints.length, 5)
+        numberOfHighlights: Math.min(splitPoints.length, 5),
+        model: selectedOllamaModel
       })
       if (highlights && highlights.length > 0) {
         setLlmSuggestions(highlights)
@@ -73,7 +75,7 @@ export default function ClipPreview () {
     } finally {
       setAnalyzing(false)
     }
-  }, [transcription, video, splitPoints.length, setSplitPoints, setError])
+  }, [transcription, video, splitPoints.length, selectedOllamaModel, setSplitPoints, setError])
 
   const handleAcceptSuggestion = useCallback((suggestion: { startTime: number; endTime: number }, index: number) => {
     const overlaps = splitPoints.some((p, i) =>

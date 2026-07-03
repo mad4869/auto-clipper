@@ -16,6 +16,7 @@ export default function CaptionSettingsView () {
   const setError = useStore((s) => s.setError)
   const setClipPaths = useStore((s) => s.setClipPaths)
   const ollama = useStore((s) => s.ollama)
+  const selectedOllamaModel = useStore((s) => s.selectedOllamaModel)
   const transcription = useStore((s) => s.transcription)
 
   const [transcribing, setTranscribing] = useState(false)
@@ -63,7 +64,8 @@ export default function CaptionSettingsView () {
       const api = (window as any).electronAPI
       const cleaned = await api.llmCleanTranscript({
         transcript: transcription.text,
-        options: { removeFillers: true, fixGrammar: false, preservePunctuation: true }
+        options: { removeFillers: true, fixGrammar: false, preservePunctuation: true },
+        model: selectedOllamaModel
       })
       if (cleaned) {
         setTranscription({ ...transcription, text: cleaned })
@@ -73,7 +75,7 @@ export default function CaptionSettingsView () {
     } finally {
       setCleaningTranscript(false)
     }
-  }, [transcription, setTranscription, setError])
+  }, [transcription, selectedOllamaModel, setTranscription, setError])
 
   const handleExport = useCallback(async () => {
     if (!video || !outputDir || !transcription || splitPoints.length === 0) return
