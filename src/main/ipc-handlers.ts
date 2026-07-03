@@ -249,11 +249,11 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
 
 async function resolveOllamaModel (requested?: string): Promise<string> {
   const models = await listOllamaModels()
-  if (requested && models.includes(requested)) {
+  if (requested && models.find(m => m.name === requested)) {
     return requested
   }
   if (models.length > 0) {
-    return models[0]
+    return models[0].name
   }
   return requested || 'llama3.2'
 }

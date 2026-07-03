@@ -75,9 +75,9 @@ export function runFfmpeg (
     })
 
     if (options.signal) {
-      options.signal.addEventListener('abort', () => {
-        proc.kill('SIGTERM')
-      })
+      const abortHandler = () => proc.kill('SIGTERM')
+      options.signal.addEventListener('abort', abortHandler, { once: true })
+      proc.on('close', () => options.signal!.removeEventListener('abort', abortHandler))
     }
 
     if (options.onProgress && options.durationSeconds) {

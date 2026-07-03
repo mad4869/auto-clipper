@@ -1,16 +1,15 @@
 import { writeFileSync, unlinkSync, existsSync } from 'node:fs'
-import { join, dirname, basename, extname } from 'node:path'
+import { join, basename, extname } from 'node:path'
 import { runFfmpeg } from './ffmpeg'
 import {
   type CaptionStyle,
   type WordTiming,
   type SplitPoint,
   DEFAULT_CAPTION_STYLE,
-  buildAnimatedCaptionFilters,
   buildAssSubtitleFile,
   buildSrtFile
 } from './filters'
-import { AppError, ErrorCodes } from '../utils/errors'
+import { AppError } from '../utils/errors'
 
 export interface CaptionJob {
   inputPath: string
@@ -69,62 +68,16 @@ export async function burnCaptions (
   const assContent = buildAssSubtitleFile(words, style)
   writeFileSync(assPath, assContent)
 
+  // FFmpeg subtitles filter needs forward slashes and escaped colons on Windows
+  const assPathForFilter = assPath.replace(/\\/g, '/').replace(/:/g, '\\:')
+
   try {
-    const wordsPerLine = style.maxWordsPerLine
-    const chunks: WordTiming[][] = []
-    for (let i = 0; i < words.length; i += wordsPerLine) {
-      chunks.push(words.slice(i, i + wordsPerLine))
-    }
-
-    const filterParts: string[] = []
-
-    if (style.animation === 'pop' || style.animation === 'fade') {
-      for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
-        const chunk = chunks[chunkIdx]
-        const chunkStart = chunk[0].start
-        const chunkEnd = chunk[chunk.length - 1].end
-        const text = chunk.map(w => w.word).join(' ')
-
-        const escapedText = text
-          .replace(/'/g, "'\\\\\\''")
-          .replace(/%/g, '\\\\%')
-          .replace(/:/g, '\\\\:')
-          .replace(/\\/g, '\\\\\\\\')
-
-        const y = style.position === 'lower-third'
-          ? `(h-text_h)-${style.fontSize + 20}`
-          : style.position === 'top'
-            ? `${style.fontSize + 10}`
-            : `(h-text_h)/2`
-
-        const alpha = style.animation === 'fade'
-          ? `:alpha='if(lt(t,${chunkStart}+0.15),(t-${chunkStart})/0.15,if(gt(t,${chunkEnd}-0.15),(${chunkEnd}-t)/0.15,1))'`
-          : ''
-
-        filterParts.push(
-          `drawtext=text='${escapedText}'` +
-          `:fontsize=${style.fontSize}` +
-          `:fontcolor=${style.fontColor}@1` +
-          `:fontfile='${style.font}'` +
-          `:x=(w-text_w)/2` +
-          `:y=${y}` +
-          `:box=1:boxcolor=black@0.6:boxborderw=6` +
-          `:enable='between(t,${chunkStart},${chunkEnd})'` +
-          alpha
-        )
-      }
-    } else {
-      filterParts.push(`subtitles='${assPath}'`)
-    }
-
-    const filterComplex = filterParts.join(',')
-
     await runFfmpeg(
       [
         '-i', job.inputPath,
-        '-vf', filterComplex,
+        '-vf', `subtitles='${assPathForFilter}'`,
         '-c:v', 'libx264',
-        '-c:a', 'aac',
+        '-c:a', 'copy',
         '-preset', 'fast',
         '-crf', '22',
         '-y',

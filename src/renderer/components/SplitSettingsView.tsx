@@ -3,15 +3,73 @@ import { useStore } from '../store'
 
 export default function SplitSettingsView () {
   const video = useStore((s) => s.video)
+  const outputDir = useStore((s) => s.outputDir)
   const splitSettings = useStore((s) => s.splitSettings)
   const setSplitSettings = useStore((s) => s.setSplitSettings)
   const setSplitPoints = useStore((s) => s.setSplitPoints)
   const setStage = useStore((s) => s.setStage)
   const setProcessing = useStore((s) => s.setProcessing)
+  const setProgress = useStore((s) => s.setProgress)
   const setError = useStore((s) => s.setError)
   const ollama = useStore((s) => s.ollama)
+  const selectedOllamaModel = useStore((s) => s.selectedOllamaModel)
+  const transcription = useStore((s) => s.transcription)
+  const setTranscription = useStore((s) => s.setTranscription)
+  const whisperModelSize = useStore((s) => s.whisperModelSize)
 
   const [detecting, setDetecting] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+
+  const handleTranscribeAndSplit = useCallback(async () => {
+    if (!video || !outputDir) return
+
+    setTranscribing(true)
+    setProcessing(true)
+    let currentTranscription = transcription
+
+    try {
+      const api = (window as any).electronAPI
+
+      // Step 1: Transcribe if not already done
+      if (!currentTranscription) {
+        const tempAudioPath = `${outputDir}/.temp_audio_${Date.now()}.wav`
+        setProgress({ stage: 'Extracting audio...', percent: 10, detail: '' })
+        await api.extractAudio({ videoPath: video.path, outputPath: tempAudioPath })
+
+        setProgress({ stage: 'Transcribing audio...', percent: 30, detail: 'This may take a minute...' })
+        const result = await api.transcribe({ audioPath: tempAudioPath, modelSize: whisperModelSize })
+        currentTranscription = { text: result.text, words: result.words, language: result.language }
+        setTranscription(currentTranscription)
+      }
+
+      // Step 2: Ask the LLM for highlight split points
+      setProgress({ stage: 'Asking AI for best highlights...', percent: 70, detail: '' })
+      const highlights = await api.llmDetectHighlights({
+        transcript: currentTranscription.text,
+        duration: video.duration,
+        numberOfHighlights: splitSettings.count ?? 5,
+        model: selectedOllamaModel
+      })
+
+      if (highlights && highlights.length > 0) {
+        const points = highlights.map((h: any, i: number) => ({
+          index: i,
+          start: h.startTime,
+          end: h.endTime
+        }))
+        setSplitPoints(points)
+        setStage('preview')
+      } else {
+        setError('AI did not return any highlights. Try using a different split mode instead.')
+      }
+    } catch (err: any) {
+      setError(err.message || 'AI-assisted splitting failed')
+    } finally {
+      setTranscribing(false)
+      setProcessing(false)
+      setProgress(null)
+    }
+  }, [video, outputDir, transcription, whisperModelSize, selectedOllamaModel, splitSettings.count, setSplitPoints, setStage, setProcessing, setProgress, setTranscription, setError])
 
   const handleCompute = useCallback(async () => {
     if (!video) return
@@ -65,6 +123,8 @@ export default function SplitSettingsView () {
     }
   }, [video, splitSettings, setSplitPoints, setStage, setProcessing, setError])
 
+  const isAiMode = splitSettings.mode === 'ai-highlights' as any
+
   return (
     <div className="view split-settings-view">
       <div className="card">
@@ -83,6 +143,7 @@ export default function SplitSettingsView () {
             <option value="fixed-count">Fixed Count</option>
             <option value="silence">Silence-Based</option>
             <option value="scene">Scene Change</option>
+            {ollama?.running && <option value="ai-highlights">🤖 AI Highlights (LLM)</option>}
           </select>
         </div>
 
@@ -168,19 +229,44 @@ export default function SplitSettingsView () {
           </>
         )}
 
-        <div className="button-row">
-          <button className="btn" onClick={() => setStage('import')}>Back</button>
-          <button className="btn btn-primary" onClick={handleCompute} disabled={detecting}>
-            {detecting ? 'Detecting...' : `Preview Clips`}
-          </button>
-        </div>
-
-        {splitSettings.mode === 'silence' && ollama?.running && (
-          <div className="llm-note">
-            <span className="badge badge-llm">LLM</span>
-            Ollama is available. After splitting, you can use AI-assisted highlight detection on the Preview screen.
+        {isAiMode && (
+          <div className="form-group">
+            <label>Number of Highlights: {splitSettings.count}</label>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              step={1}
+              value={splitSettings.count ?? 5}
+              onChange={(e) => setSplitSettings({ count: parseInt(e.target.value) })}
+            />
+            <div className="range-labels">
+              <span>1</span>
+              <span>10</span>
+            </div>
+            <p className="hint" style={{ marginTop: '0.5rem' }}>
+              The AI will transcribe your video and pick the {splitSettings.count ?? 5} most engaging segments automatically.
+              {transcription && ' ✓ Transcript already available — AI will skip transcription.'}
+            </p>
           </div>
         )}
+
+        <div className="button-row">
+          <button className="btn" onClick={() => setStage('import')}>Back</button>
+          {isAiMode ? (
+            <button
+              className="btn btn-primary"
+              onClick={handleTranscribeAndSplit}
+              disabled={transcribing || !outputDir}
+            >
+              {transcribing ? 'Analyzing with AI...' : '🤖 Auto-Split with AI'}
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={handleCompute} disabled={detecting}>
+              {detecting ? 'Detecting...' : 'Preview Clips'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
