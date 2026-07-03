@@ -17,12 +17,52 @@ export default function ClipPreview () {
   const ollama = useStore((s) => s.ollama)
   const selectedOllamaModel = useStore((s) => s.selectedOllamaModel)
   const transcription = useStore((s) => s.transcription)
+  const setTranscription = useStore((s) => s.setTranscription)
+  const whisperModelSize = useStore((s) => s.whisperModelSize)
+  const setProcessing = useStore((s) => s.setProcessing)
+  const setProgress = useStore((s) => s.setProgress)
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editStart, setEditStart] = useState(0)
   const [editEnd, setEditEnd] = useState(0)
   const [analyzing, setAnalyzing] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
   const [llmSuggestions, setLlmSuggestions] = useState<Array<{ startTime: number; endTime: number; reason: string }>>([])
+
+  const handleTranscribe = useCallback(async () => {
+    if (!video || !outputDir) return
+
+    setTranscribing(true)
+    setProcessing(true)
+    try {
+      const api = (window as any).electronAPI
+      const tempAudioPath = `${outputDir}/.temp_audio_${Date.now()}.wav`
+      setProgress({ stage: 'Extracting audio...', percent: 10, detail: '' })
+
+      await api.extractAudio({ videoPath: video.path, outputPath: tempAudioPath })
+
+      setProgress({ stage: 'Transcribing...', percent: 30, detail: '' })
+
+      const result = await api.transcribe({
+        audioPath: tempAudioPath,
+        modelSize: whisperModelSize
+      })
+
+      setTranscription({
+        text: result.text,
+        words: result.words,
+        language: result.language
+      })
+
+      setProgress({ stage: 'Done', percent: 100, detail: 'Transcription complete' })
+    } catch (err: any) {
+      setError(err.message || 'Transcription failed')
+    } finally {
+      setTranscribing(false)
+      setProcessing(false)
+      setProgress(null)
+    }
+  }, [video, outputDir, whisperModelSize, setTranscription, setProcessing, setProgress, setError])
 
   const handleDelete = useCallback((index: number) => {
     const newPoints = splitPoints
@@ -165,13 +205,23 @@ export default function ClipPreview () {
 
         {ollama?.running && (
           <div className="llm-section">
-            <button
-              className="btn btn-secondary"
-              onClick={handleLlmAnalysis}
-              disabled={analyzing || !transcription}
-            >
-              {analyzing ? 'Analyzing with LLM...' : 'AI Highlight Detection'}
-            </button>
+            {transcription ? (
+              <button
+                className="btn btn-secondary"
+                onClick={handleLlmAnalysis}
+                disabled={analyzing}
+              >
+                {analyzing ? 'Analyzing with LLM...' : 'AI Highlight Detection'}
+              </button>
+            ) : (
+              <button
+                className="btn btn-secondary"
+                onClick={handleTranscribe}
+                disabled={transcribing}
+              >
+                {transcribing ? 'Transcribing...' : 'Transcribe to enable AI Highlights'}
+              </button>
+            )}
             <p className="hint">
               Uses local LLM to suggest engaging segments. Requires transcribed video.
             </p>
