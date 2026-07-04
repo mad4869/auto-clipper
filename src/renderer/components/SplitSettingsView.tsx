@@ -9,6 +9,7 @@ export default function SplitSettingsView () {
   const setSplitPoints = useStore((s) => s.setSplitPoints)
   const setStage = useStore((s) => s.setStage)
   const setProcessing = useStore((s) => s.setProcessing)
+  const progress = useStore((s) => s.progress)
   const setProgress = useStore((s) => s.setProgress)
   const setError = useStore((s) => s.setError)
   const ollama = useStore((s) => s.ollama)
@@ -248,6 +249,31 @@ export default function SplitSettingsView () {
               The AI will transcribe your video and pick the {splitSettings.count ?? 5} most engaging segments automatically.
               {transcription && ' ✓ Transcript already available — AI will skip transcription.'}
             </p>
+          </div>
+        )}
+
+        {(transcribing || detecting) && (
+          <div className="progress-bar-container" style={{ margin: '1.5rem 0', padding: '1.2rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', height: 'auto', overflow: 'visible' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem', fontSize: '0.95rem', fontWeight: 600 }}>
+              <span>{progress?.stage || (transcribing ? 'Analyzing video with AI...' : 'Detecting split points...')}</span>
+              <span style={{ color: '#4facfe' }}>{progress?.percent ? `${progress.percent}%` : '⌛ Processing...'}</span>
+            </div>
+            <div style={{ width: '100%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden' }}>
+              {progress?.percent ? (
+                <div
+                  style={{
+                    width: `${progress.percent}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #4facfe 0%, #00f2fe 100%)',
+                    transition: 'width 0.3s ease',
+                    borderRadius: '5px'
+                  }}
+                />
+              ) : (
+                <div className="progress-bar-shimmer" />
+              )}
+            </div>
+            {progress?.detail && <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '0.5rem' }}>{progress.detail}</div>}
           </div>
         )}
 

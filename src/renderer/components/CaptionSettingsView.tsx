@@ -32,6 +32,7 @@ export default function CaptionSettingsView () {
   const setTranscription = useStore((s) => s.setTranscription)
   const setStage = useStore((s) => s.setStage)
   const setProcessing = useStore((s) => s.setProcessing)
+  const progress = useStore((s) => s.progress)
   const setProgress = useStore((s) => s.setProgress)
   const setError = useStore((s) => s.setError)
   const setClipPaths = useStore((s) => s.setClipPaths)
@@ -161,6 +162,35 @@ export default function CaptionSettingsView () {
 
         <section className="section">
           <h2>1. Transcribe</h2>
+          {(transcribing || cleaningTranscript) && (
+            <div className="progress-bar-container" style={{ margin: '1rem 0', padding: '1.2rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', height: 'auto', overflow: 'visible' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem', fontSize: '0.95rem', fontWeight: 600 }}>
+                <span>{progress?.stage || (transcribing ? 'Transcribing audio with Whisper...' : 'Cleaning transcript with LLM...')}</span>
+                <span style={{ color: '#4facfe' }}>{progress?.percent ? `${progress.percent}%` : '⌛ Processing...'}</span>
+              </div>
+              <div style={{ width: '100%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden' }}>
+                {progress?.percent ? (
+                  <div
+                    style={{
+                      width: `${progress.percent}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #4facfe 0%, #00f2fe 100%)',
+                      transition: 'width 0.3s ease',
+                      borderRadius: '5px'
+                    }}
+                  />
+                ) : (
+                  <div className="progress-bar-shimmer" />
+                )}
+              </div>
+              {progress?.detail && <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '0.5rem' }}>{progress.detail}</div>}
+              {!progress?.detail && (
+                <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '0.5rem' }}>
+                  {transcribing ? 'Whisper speech-to-text is running. Please wait...' : 'AI is correcting phonetic errors and removing fillers. Please wait...'}
+                </div>
+              )}
+            </div>
+          )}
           {!transcription ? (
             <div>
               <p className="hint">Run speech-to-text on the first clip to get word timestamps.</p>

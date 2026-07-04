@@ -5,6 +5,7 @@ export interface VideoInfo {
   name: string
   size: number
   duration: number
+  defaultOutputDir?: string
 }
 
 export interface SplitPoint {
@@ -128,7 +129,7 @@ export const useStore = create<AppState>((set) => ({
   error: null,
 
   setStage: (stage) => set({ stage }),
-  setVideo: (video) => set({ video, stage: video ? 'split-settings' : 'import', splitPoints: [], transcription: null, clipPaths: [] }),
+  setVideo: (video) => set({ video, splitPoints: [], transcription: null, clipPaths: [] }),
   setOutputDir: (dir) => set({ outputDir: dir }),
   setSplitSettings: (settings) => set((s) => ({ splitSettings: { ...s.splitSettings, ...settings } })),
   setSplitPoints: (points) => set({ splitPoints: points }),

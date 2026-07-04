@@ -62,7 +62,8 @@ export async function generateText (options: OllamaGenerateOptions): Promise<str
     stream: false,
     options: {
       temperature: options.temperature ?? 0.7,
-      num_predict: options.maxTokens ?? 4096
+      num_predict: options.maxTokens ?? 4096,
+      repeat_penalty: 1.15
     }
   }
 
@@ -102,7 +103,8 @@ export async function* generateTextStream (options: OllamaGenerateOptions): Asyn
     stream: true,
     options: {
       temperature: options.temperature ?? 0.7,
-      num_predict: options.maxTokens ?? 4096
+      num_predict: options.maxTokens ?? 4096,
+      repeat_penalty: 1.15
     }
   }
 

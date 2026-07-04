@@ -82,19 +82,48 @@ export async function transcribeAudio (
           const words: WordTiming[] = []
           const textSegments: string[] = []
 
+          function extractWordsFromTokens(tokens: any[]): WordTiming[] {
+            const extracted: WordTiming[] = []
+            for (const tok of tokens) {
+              const rawText = tok.text || tok.word || ''
+              const cleanText = rawText.trim()
+              if (!cleanText || (cleanText.startsWith('[') && cleanText.endsWith(']'))) continue
+
+              const start = (tok.offsets?.from ?? tok.start ?? 0) / 1000
+              const end = (tok.offsets?.to ?? tok.end ?? 0) / 1000
+
+              const isNewWord = extracted.length === 0 || /^\s/.test(rawText) || /^[_\u0120]/.test(rawText) || (/^[.,?!:;"'\)\}\]]/.test(cleanText) === false && rawText.startsWith(' '))
+
+              if (isNewWord) {
+                extracted.push({
+                  word: cleanText,
+                  start,
+                  end
+                })
+              } else {
+                const prev = extracted[extracted.length - 1]
+                prev.word += cleanText
+                prev.end = Math.max(prev.end, end)
+              }
+            }
+            return extracted
+          }
+
           if (Array.isArray(parsed.transcription)) {
             for (const seg of parsed.transcription) {
               if (seg.text) textSegments.push(seg.text.trim())
-              if (Array.isArray(seg.tokens) && seg.tokens.length > 0) {
-                for (const tok of seg.tokens) {
-                  const tokText = (tok.text || '').trim()
-                  if (!tokText || tokText.startsWith('[') && tokText.endsWith(']')) continue
+              if (Array.isArray(seg.words) && seg.words.length > 0) {
+                for (const w of seg.words) {
+                  const wText = (w.text || w.word || '').trim()
+                  if (!wText || (wText.startsWith('[') && wText.endsWith(']'))) continue
                   words.push({
-                    word: tokText,
-                    start: (tok.offsets?.from || 0) / 1000,
-                    end: (tok.offsets?.to || 0) / 1000
+                    word: wText,
+                    start: (w.offsets?.from ?? w.start ?? 0) / 1000,
+                    end: (w.offsets?.to ?? w.end ?? 0) / 1000
                   })
                 }
+              } else if (Array.isArray(seg.tokens) && seg.tokens.length > 0) {
+                words.push(...extractWordsFromTokens(seg.tokens))
               } else if (seg.text) {
                 words.push({
                   word: seg.text.trim(),
@@ -107,20 +136,24 @@ export async function transcribeAudio (
             if (parsed.transcription.text) textSegments.push(parsed.transcription.text)
             if (Array.isArray(parsed.transcription.segments)) {
               for (const seg of parsed.transcription.segments) {
-                if (Array.isArray(seg.words)) {
+                if (Array.isArray(seg.words) && seg.words.length > 0) {
                   for (const w of seg.words) {
+                    const wText = (w.text || w.word || '').trim()
+                    if (!wText || (wText.startsWith('[') && wText.endsWith(']'))) continue
                     words.push({
-                      word: w.text || w.word || '',
+                      word: wText,
                       start: w.start || 0,
                       end: w.end || 0
                     })
                   }
+                } else if (Array.isArray(seg.tokens) && seg.tokens.length > 0) {
+                  words.push(...extractWordsFromTokens(seg.tokens))
                 }
               }
             }
           }
 
-          const fullText = textSegments.join(' ')
+          const fullText = words.length > 0 ? words.map(w => w.word).join(' ') : textSegments.join(' ')
           await unlink(jsonPath).catch(() => {})
 
           if (words.length > 0) {

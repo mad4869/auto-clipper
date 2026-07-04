@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import { existsSync, statSync, mkdirSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, basename } from 'node:path'
 import { getVideoDuration } from './ffmpeg/ffmpeg'
 import {
   computeSplitPoints,
@@ -26,6 +26,28 @@ import {
 } from './llm/prompts'
 import { ProgressReporter } from './utils/progress'
 import { AppError, ErrorCodes } from './utils/errors'
+
+function postProcessLlmTranscript (text: string): string {
+  let cleaned = text.trim()
+  cleaned = cleaned.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim()
+  cleaned = cleaned.replace(/^(?:sure[!,\s]*|certainly[!,\s]*|of course[!,\s]*)*(?:here is|here's|below is|this is)?\s*(?:the\s*)?(?:cleaned|corrected|edited|revised|final)?\s*(?:and\s*)?(?:cleaned|corrected|edited|revised|final)?\s*(?:video\s*)?(?:transcript|version|output|text|result)?\s*:\s*/i, '').trim()
+
+  const firstWords = cleaned.slice(0, 50).trim()
+  if (firstWords.length >= 25 && cleaned.length > 200) {
+    const secondIdx = cleaned.indexOf(firstWords, 100)
+    if (secondIdx > 0) {
+      cleaned = cleaned.slice(0, secondIdx).trim()
+    }
+  }
+
+  const midRegex = /\n+(?:here is|here's|below is|this is)\s*(?:the\s*)?(?:cleaned|corrected|edited|revised|final)?\s*(?:and\s*)?(?:cleaned|corrected|edited|revised|final)?\s*(?:video\s*)?(?:transcript|version|output|text|result)?\s*:\s*/i
+  const midMatch = cleaned.match(midRegex)
+  if (midMatch && midMatch.index !== undefined && midMatch.index > 50) {
+    cleaned = cleaned.slice(0, midMatch.index).trim()
+  }
+
+  return cleaned
+}
 
 function alignWords (orig: WordTiming[], cleanedText: string): WordTiming[] {
   const cleanWords = cleanedText.trim().split(/\s+/).filter(Boolean)
@@ -134,11 +156,17 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
     const stats = statSync(filePath)
     const duration = await getVideoDuration(filePath)
 
+    const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'video'
+    const ext = name.includes('.') ? `.${name.split('.').pop()}` : ''
+    const baseName = ext ? name.slice(0, -ext.length) : name
+    const defaultOutputDir = join(dirname(filePath), `${baseName}_clips`)
+
     return {
       path: filePath,
-      name: filePath.split('/').pop() || filePath.split('\\').pop() || '',
+      name,
       size: stats.size,
-      duration
+      duration,
+      defaultOutputDir
     }
   })
 
@@ -358,13 +386,14 @@ async function resolveOllamaModel (requested?: string): Promise<string> {
   }) => {
     const activeModel = await resolveOllamaModel(model)
     const prompt = buildCleanTranscriptPrompt({ transcript, ...options })
-    const cleanedText = await generateText({
+    const rawCleanedText = await generateText({
       model: activeModel,
       prompt,
       system: 'You are an expert transcript editor and speech-to-text error corrector. Return only the cleaned and corrected text without markdown or commentary.',
       temperature: 0.2,
       maxTokens: 4096
     })
+    const cleanedText = postProcessLlmTranscript(rawCleanedText)
 
     if (words && Array.isArray(words) && words.length > 0) {
       const alignedWords = alignWords(words, cleanedText)

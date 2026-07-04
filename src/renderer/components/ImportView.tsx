@@ -30,11 +30,14 @@ export default function ImportView () {
       const result = await api.selectVideo()
       if (result) {
         setVideo(result)
+        if (!outputDir && result.defaultOutputDir) {
+          setOutputDir(result.defaultOutputDir)
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to select video')
     }
-  }, [setVideo, setError])
+  }, [setVideo, outputDir, setOutputDir, setError])
 
   const handleSelectOutput = useCallback(async () => {
     try {
