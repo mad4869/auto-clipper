@@ -19,21 +19,15 @@ export interface TitleGenerationOptions {
 }
 
 export function buildCleanTranscriptPrompt (options: CleanTranscriptOptions): string {
-  let instructions = 'Clean up the following transcript by:\n'
-
+  let instructions = 'You are an expert transcript editor and speech-to-text error corrector. Clean up and correct the following video transcript:\n\n'
+  instructions += 'Instructions:\n'
+  instructions += '1. Correct speech-to-text phonetic misrecognitions, spelling errors, and fragmented words based on language context (e.g., in Indonesian fix words like "Fonis" -> "Vonis", "ast ikan" -> "pastikan", "dapet" -> "dapat"; in English fix obvious phonetic typos).\n'
+  instructions += '2. Fix grammar and sentence structure while preserving the natural speaking style and vocabulary.\n'
   if (options.removeFillers) {
-    instructions += '- Removing filler words (um, uh, like, you know, etc.)\n'
+    instructions += '3. Remove meaningless filler words and stutters (um, uh, like, you know, eeh, hmm, etc.).\n'
   }
-  if (options.fixGrammar) {
-    instructions += '- Fixing obvious grammatical errors\n'
-  }
-  if (options.preservePunctuation) {
-    instructions += '- Preserve original punctuation and capitalization\n'
-  }
-
-  instructions += '\nReturn ONLY the cleaned transcript, no explanations or notes.\n\n'
-
-  return instructions + options.transcript
+  instructions += '\nReturn ONLY the cleaned and corrected transcript text. Do not include any explanations, notes, or markdown formatting.\n\n'
+  return instructions + 'Transcript:\n' + options.transcript
 }
 
 export function buildHighlightDetectionPrompt (options: HighlightSuggestionOptions): string {

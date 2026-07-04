@@ -2,6 +2,26 @@ import { useState, useCallback } from 'react'
 import { useStore } from '../store'
 import { FONTS } from '../styles/fonts'
 
+function formatTime (seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  const ms = Math.floor((seconds % 1) * 10)
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${ms}`
+}
+
+function groupWordsIntoLines (words: Array<{ word: string; start: number; end: number }>): Array<Array<{ word: string; start: number; end: number }>> {
+  const lines: Array<Array<{ word: string; start: number; end: number }>> = []
+  let current: Array<{ word: string; start: number; end: number }> = []
+  for (let i = 0; i < words.length; i++) {
+    current.push(words[i])
+    if (current.length >= 8 || /[\.\!\?]$/.test(words[i].word) || i === words.length - 1) {
+      lines.push(current)
+      current = []
+    }
+  }
+  return lines
+}
+
 export default function CaptionSettingsView () {
   const video = useStore((s) => s.video)
   const splitPoints = useStore((s) => s.splitPoints)
@@ -62,13 +82,20 @@ export default function CaptionSettingsView () {
     setCleaningTranscript(true)
     try {
       const api = (window as any).electronAPI
-      const cleaned = await api.llmCleanTranscript({
+      const res = await api.llmCleanTranscript({
         transcript: transcription.text,
-        options: { removeFillers: true, fixGrammar: false, preservePunctuation: true },
+        words: transcription.words,
+        options: { removeFillers: true, fixGrammar: true, preservePunctuation: true },
         model: selectedOllamaModel
       })
-      if (cleaned) {
-        setTranscription({ ...transcription, text: cleaned })
+      if (res && typeof res === 'object' && res.text) {
+        setTranscription({
+          ...transcription,
+          text: res.text,
+          words: res.words || transcription.words
+        })
+      } else if (typeof res === 'string') {
+        setTranscription({ ...transcription, text: res })
       }
     } catch (err: any) {
       setError(err.message || 'Transcript cleanup failed')
@@ -148,9 +175,20 @@ export default function CaptionSettingsView () {
           ) : (
             <div className="transcript-preview">
               <div className="transcript-text">
-                <strong>Transcript ({transcription.language}):</strong>
-                <p>{transcription.text}</p>
-                <small>{transcription.words.length} words with timestamps</small>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <strong>Transcript ({transcription.language}):</strong>
+                  <small>{transcription.words.length} words with timestamps</small>
+                </div>
+                <div className="timestamp-box" style={{ maxHeight: '220px', overflowY: 'auto', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border)', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem' }}>
+                  {groupWordsIntoLines(transcription.words).map((line, idx) => (
+                    <div key={idx} style={{ marginBottom: '0.5rem', fontSize: '0.85rem', lineHeight: '1.4', display: 'flex', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--primary)', fontWeight: 600, fontFamily: 'monospace', flexShrink: 0 }}>
+                        [{formatTime(line[0].start)} - {formatTime(line[line.length - 1].end)}]
+                      </span>
+                      <span>{line.map(w => w.word).join(' ')}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="button-row">
                 <button className="btn btn-small btn-secondary" onClick={handleTranscribe}>
@@ -189,8 +227,8 @@ export default function CaptionSettingsView () {
             <label>Font Size: {captionStyle.fontSize}px</label>
             <input
               type="range"
-              min={16}
-              max={48}
+              min={20}
+              max={120}
               step={2}
               value={captionStyle.fontSize}
               onChange={(e) => setCaptionStyle({ fontSize: parseInt(e.target.value) })}

@@ -15,7 +15,7 @@ import {
 import { extractAudio, transcribeAudio, type TranscribeOptions } from './whisper/transcribe'
 import { type WhisperModelSize, getAvailableModels, WHISPER_MODEL_SIZES } from './whisper/whisper'
 import { burnCaptions, type CaptionJob } from './ffmpeg/caption'
-import { type CaptionStyle } from './ffmpeg/filters'
+import { type CaptionStyle, type WordTiming } from './ffmpeg/filters'
 import { checkOllamaRunning, listOllamaModels, generateText } from './llm/ollama'
 import {
   buildCleanTranscriptPrompt,
@@ -26,6 +26,93 @@ import {
 } from './llm/prompts'
 import { ProgressReporter } from './utils/progress'
 import { AppError, ErrorCodes } from './utils/errors'
+
+function alignWords (orig: WordTiming[], cleanedText: string): WordTiming[] {
+  const cleanWords = cleanedText.trim().split(/\s+/).filter(Boolean)
+  if (cleanWords.length === 0 || orig.length === 0) return orig
+
+  const n = orig.length
+  const m = cleanWords.length
+  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(Infinity))
+  dp[0][0] = 0
+
+  for (let i = 1; i <= n; i++) dp[i][0] = i * 0.6
+  for (let j = 1; j <= m; j++) dp[0][j] = j * 0.6
+
+  for (let i = 1; i <= n; i++) {
+    const w1 = orig[i - 1].word.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F\u1E00-\u1EFF]/g, '')
+    for (let j = 1; j <= m; j++) {
+      const w2 = cleanWords[j - 1].toLowerCase().replace(/[^a-z0-9\u00C0-\u024F\u1E00-\u1EFF]/g, '')
+      let matchCost = 1.0
+      if (w1 === w2 && w1.length > 0) {
+        matchCost = 0
+      } else if (w1.length > 0 && w2.length > 0) {
+        if (w1.includes(w2) || w2.includes(w1)) matchCost = 0.2
+        else if (w1[0] === w2[0] && Math.abs(w1.length - w2.length) <= 2) matchCost = 0.4
+      }
+      dp[i][j] = Math.min(
+        dp[i - 1][j - 1] + matchCost,
+        dp[i - 1][j] + 0.6,
+        dp[i][j - 1] + 0.6
+      )
+    }
+  }
+
+  let i = n
+  let j = m
+  const aligned: Array<{ word: string; start: number; end: number }> = []
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0) {
+      const w1 = orig[i - 1].word.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F\u1E00-\u1EFF]/g, '')
+      const w2 = cleanWords[j - 1].toLowerCase().replace(/[^a-z0-9\u00C0-\u024F\u1E00-\u1EFF]/g, '')
+      let matchCost = 1.0
+      if (w1 === w2 && w1.length > 0) matchCost = 0
+      else if (w1.length > 0 && w2.length > 0 && (w1.includes(w2) || w2.includes(w1))) matchCost = 0.2
+      else if (w1[0] === w2[0] && Math.abs(w1.length - w2.length) <= 2) matchCost = 0.4
+
+      if (Math.abs(dp[i][j] - (dp[i - 1][j - 1] + matchCost)) < 1e-6) {
+        aligned.unshift({
+          word: cleanWords[j - 1],
+          start: orig[i - 1].start,
+          end: orig[i - 1].end
+        })
+        i--
+        j--
+        continue
+      }
+    }
+    if (i > 0 && Math.abs(dp[i][j] - (dp[i - 1][j] + 0.6)) < 1e-6) {
+      i--
+      continue
+    }
+    if (j > 0) {
+      aligned.unshift({
+        word: cleanWords[j - 1],
+        start: -1,
+        end: -1
+      })
+      j--
+    }
+  }
+
+  for (let k = 0; k < aligned.length; k++) {
+    if (aligned[k].start === -1) {
+      const prevEnd = k > 0 ? aligned[k - 1].end : 0
+      let nextStart = prevEnd + 0.5
+      for (let next = k + 1; next < aligned.length; next++) {
+        if (aligned[next].start !== -1) {
+          nextStart = aligned[next].start
+          break
+        }
+      }
+      aligned[k].start = prevEnd
+      aligned[k].end = Math.max(prevEnd + 0.1, Math.min(nextStart, prevEnd + 0.3))
+    }
+  }
+
+  return aligned
+}
 
 export function registerIpcHandlers (mainWindow: BrowserWindow): void {
   const progress = new ProgressReporter(mainWindow)
@@ -260,21 +347,30 @@ async function resolveOllamaModel (requested?: string): Promise<string> {
 
   ipcMain.handle('llm-clean-transcript', async (_event, {
     transcript,
+    words,
     options,
     model
   }: {
     transcript: string
+    words?: WordTiming[]
     options: CleanTranscriptOptions
     model?: string
   }) => {
     const activeModel = await resolveOllamaModel(model)
     const prompt = buildCleanTranscriptPrompt({ transcript, ...options })
-    return generateText({
+    const cleanedText = await generateText({
       model: activeModel,
       prompt,
-      system: 'You are a transcript cleaning assistant. Return only the cleaned text.',
-      temperature: 0.3
+      system: 'You are an expert transcript editor and speech-to-text error corrector. Return only the cleaned and corrected text without markdown or commentary.',
+      temperature: 0.2,
+      maxTokens: 4096
     })
+
+    if (words && Array.isArray(words) && words.length > 0) {
+      const alignedWords = alignWords(words, cleanedText)
+      return { text: cleanedText, words: alignedWords }
+    }
+    return { text: cleanedText }
   })
 
   ipcMain.handle('llm-detect-highlights', async (_event, {

@@ -25,7 +25,7 @@ export interface CaptionStyle {
 
 export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
   font: 'Arial',
-  fontSize: 28,
+  fontSize: 48,
   fontColor: '#FFFFFF',
   highlightColor: '#FFD700',
   position: 'lower-third',
@@ -226,22 +226,43 @@ export function buildAnimatedCaptionFilters (
   return filters
 }
 
+function hexToAssColor (hex: string): string {
+  const clean = hex.replace('#', '')
+  if (clean.length === 6) {
+    const r = clean.slice(0, 2)
+    const g = clean.slice(2, 4)
+    const b = clean.slice(4, 6)
+    return `&H00${b}${g}${r}&`
+  }
+  return '&H00FFFFFF&'
+}
+
 export function buildAssSubtitleFile (
   words: WordTiming[],
   style: CaptionStyle,
-  videoWidth: number = 1920,
-  videoHeight: number = 1080
+  videoWidth: number = 1080,
+  videoHeight: number = 1920
 ): string {
+  let alignment = 2
+  let marginV = 200
+  if (style.position === 'center') {
+    alignment = 5
+    marginV = 0
+  } else if (style.position === 'top') {
+    alignment = 8
+    marginV = 180
+  }
+
   const lines: string[] = [
     '[Script Info]',
     'ScriptType: v4.00+',
-    'PlayResX: 640',
-    'PlayResY: 360',
+    `PlayResX: ${videoWidth}`,
+    `PlayResY: ${videoHeight}`,
     'ScaledBorderAndShadow: yes',
     '',
     '[V4+ Styles]',
     `Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding`,
-    `Style: Default,${style.font},${Math.round(style.fontSize * 640 / videoWidth)},&H00${style.fontColor.slice(1)}&,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1`,
+    `Style: Default,${style.font},${style.fontSize},${hexToAssColor(style.fontColor)},&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,${alignment},40,40,${marginV},1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'

@@ -28,7 +28,7 @@ const api = {
   checkOllama: () => ipcRenderer.invoke('check-ollama'),
   ollamaGenerate: (params: { model: string; prompt: string; system?: string; temperature?: number; maxTokens?: number }) =>
     ipcRenderer.invoke('ollama-generate', params),
-  llmCleanTranscript: (params: { transcript: string; options: Record<string, unknown>; model?: string }) =>
+  llmCleanTranscript: (params: { transcript: string; words?: unknown[]; options: Record<string, unknown>; model?: string }) =>
     ipcRenderer.invoke('llm-clean-transcript', params),
   llmDetectHighlights: (params: { transcript: string; duration: number; numberOfHighlights?: number; model?: string }) =>
     ipcRenderer.invoke('llm-detect-highlights', params),
