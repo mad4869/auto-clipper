@@ -156,7 +156,7 @@ export function registerIpcHandlers (mainWindow: BrowserWindow): void {
     const stats = statSync(filePath)
     const duration = await getVideoDuration(filePath)
 
-    const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'video'
+    const name = basename(filePath) || 'video'
     const ext = name.includes('.') ? `.${name.split('.').pop()}` : ''
     const baseName = ext ? name.slice(0, -ext.length) : name
     const defaultOutputDir = join(dirname(filePath), `${baseName}_clips`)
